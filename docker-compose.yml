@@ -1,0 +1,20 @@
+# Local n8n orchestrator for ArcVault triage demo.
+# Named volume `n8n_data` holds the workflow + encrypted credentials (gitignored).
+# Pinned to :latest for assessment scope; production would pin a SHA.
+
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: arcvault-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - TZ=America/Toronto
+      - N8N_SECURE_COOKIE=false
+      - N8N_RUNNERS_ENABLED=true
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+volumes:
+  n8n_data:
