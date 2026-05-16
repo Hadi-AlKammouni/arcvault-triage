@@ -1,0 +1,146 @@
+[
+  {
+    "id": 1,
+    "source": "Email",
+    "body": "Hi, I tried logging in this morning and keep getting a 403 error. My account is arcvault.io/user/jsmith. This started after your update last Tuesday.",
+    "category": "Bug Report",
+    "priority": "Medium",
+    "confidence": 0.95,
+    "core_issue": "Login fails with a 403 error after the update.",
+    "identifiers": [
+      {
+        "type": "error_code",
+        "value": "403"
+      },
+      {
+        "type": "account",
+        "value": "arcvault.io/user/jsmith"
+      }
+    ],
+    "urgency_signal": null,
+    "routing": {
+      "category_destination": "Engineering",
+      "final_destination": "Engineering"
+    },
+    "escalation": {
+      "flag": false,
+      "reasons": []
+    },
+    "summary": "The user is unable to log in due to a 403 error. This issue started after the update last Tuesday and is affecting the account arcvault.io/user/jsmith. The team should review the login functionality and recent update changes to determine the cause of the error.",
+    "processed_at": "2026-05-16T17:01:42.249Z"
+  },
+  {
+    "id": 2,
+    "source": "Web Form",
+    "body": "We'd love to see a bulk export feature for our audit logs. We're a compliance-heavy org and this would save us hours every month.",
+    "category": "Feature Request",
+    "priority": "Medium",
+    "confidence": 0.95,
+    "core_issue": "Customer requests bulk export for audit logs.",
+    "identifiers": [],
+    "urgency_signal": null,
+    "routing": {
+      "category_destination": "Product",
+      "final_destination": "Product"
+    },
+    "escalation": {
+      "flag": false,
+      "reasons": []
+    },
+    "summary": "The customer is requesting a bulk export feature for audit logs to simplify their compliance processes. This feature would specifically help the customer save time, with their organization being compliance-heavy. The team should review the feasibility of implementing bulk export for audit logs.",
+    "processed_at": "2026-05-16T17:01:43.340Z"
+  },
+  {
+    "id": 3,
+    "source": "Support Portal",
+    "body": "Invoice #8821 shows a charge of $1,240 but our contract rate is $980/month. Can someone look into this?",
+    "category": "Billing Issue",
+    "priority": "High",
+    "confidence": 0.98,
+    "core_issue": "Discrepancy between contract rate and invoice charge.",
+    "identifiers": [
+      {
+        "type": "invoice",
+        "value": "8821"
+      },
+      {
+        "type": "amount",
+        "value": "$1,240"
+      },
+      {
+        "type": "amount",
+        "value": "$980"
+      }
+    ],
+    "urgency_signal": "discrepancy in billing",
+    "routing": {
+      "category_destination": "Billing",
+      "final_destination": "Billing"
+    },
+    "escalation": {
+      "flag": false,
+      "reasons": []
+    },
+    "summary": "A discrepancy has been found between the contract rate and the charge on Invoice #8821. The customer's contract rate is $980/month, but the invoice shows a charge of $1,240. The team should review Invoice #8821 to determine the cause of the discrepancy and decide on the necessary correction.",
+    "processed_at": "2026-05-16T17:01:44.521Z"
+  },
+  {
+    "id": 4,
+    "source": "Email",
+    "body": "I'm not sure if this is the right place to ask, but is there a way to set up SSO with Okta? We're evaluating switching our auth provider.",
+    "category": "Technical Question",
+    "priority": "Low",
+    "confidence": 0.92,
+    "core_issue": "Customer is asking about setting up SSO with Okta.",
+    "identifiers": [
+      {
+        "type": "integration",
+        "value": "Okta"
+      },
+      {
+        "type": "integration",
+        "value": "SSO"
+      }
+    ],
+    "urgency_signal": null,
+    "routing": {
+      "category_destination": "IT/Security",
+      "final_destination": "IT/Security"
+    },
+    "escalation": {
+      "flag": false,
+      "reasons": []
+    },
+    "summary": "The customer is inquiring about setting up Single Sign-On (SSO) with Okta as they evaluate switching their authentication provider. The specific details of their current setup are not provided, but Okta is the mentioned integration. The team should review available SSO setup documentation and guidelines for Okta to determine the best course of action for the customer's query.",
+    "processed_at": "2026-05-16T17:01:47.324Z"
+  },
+  {
+    "id": 5,
+    "source": "Web Form",
+    "body": "Your dashboard stopped loading for us around 2pm EST. Checked our end — it's definitely on yours. Multiple users affected.",
+    "category": "Incident/Outage",
+    "priority": "High",
+    "confidence": 0.98,
+    "core_issue": "Dashboard stopped loading for multiple users.",
+    "identifiers": [
+      {
+        "type": "timestamp",
+        "value": "2pm EST"
+      }
+    ],
+    "urgency_signal": "multiple users affected",
+    "routing": {
+      "category_destination": "Engineering",
+      "final_destination": "Escalation"
+    },
+    "escalation": {
+      "flag": true,
+      "reasons": [
+        "category Incident/Outage always escalates",
+        "body contains 'multiple users affected'"
+      ]
+    },
+    "summary": "The dashboard stopped loading for multiple users around 2pm EST. The issue is affecting multiple users, with the customer confirming they have checked their end and the problem appears to be on the ArcVault side. The team should investigate the dashboard loading issue to determine the cause and resolution.",
+    "processed_at": "2026-05-16T17:01:48.368Z"
+  }
+]
