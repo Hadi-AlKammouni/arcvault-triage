@@ -1,0 +1,32 @@
+# ─── secrets ─────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ─── local-only scratch files (never push) ───────────────────────────────
+*.local.*
+*.local
+scratch/
+tmp/
+
+# ─── n8n persistent volume (contains encrypted credentials + drafts) ─────
+n8n_data/
+
+# ─── python ──────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ─── editor / OS noise ───────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── logs ────────────────────────────────────────────────────────────────
+*.log
+logs/
