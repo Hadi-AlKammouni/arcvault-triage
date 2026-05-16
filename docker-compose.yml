@@ -12,7 +12,6 @@ services:
     environment:
       - TZ=America/Toronto
       - N8N_SECURE_COOKIE=false
-      - N8N_RUNNERS_ENABLED=true
     volumes:
       - n8n_data:/home/node/.n8n
 
