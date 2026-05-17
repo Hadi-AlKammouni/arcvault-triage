@@ -1,0 +1,363 @@
+{
+  "name": "ArcVault Triage",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "triage",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        96,
+        16
+      ],
+      "id": "acc32be6-3f1f-4aa7-bea0-6a7280b086aa",
+      "name": "Webhook",
+      "webhookId": "259020a4-c293-41d3-acd7-a36b32f5809b"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Pull the parsed JSON body that the Webhook node received.\n// n8n exposes the POST body at $json.body when Content-Type is application/json.\nconst payload = $json.body ?? $json;\n\nconst id = payload.id;\nconst source = payload.source;\nconst body = payload.body;\n\nif (id === undefined || id === null) {\n  throw new Error(`Webhook payload missing 'id'. Got: ${JSON.stringify(payload)}`);\n}\nif (!source || typeof source !== 'string') {\n  throw new Error(`Webhook payload missing 'source' string. Got: ${JSON.stringify(payload)}`);\n}\nif (!body || typeof body !== 'string') {\n  throw new Error(`Webhook payload missing 'body' string. Got: ${JSON.stringify(payload)}`);\n}\n\nreturn { id, source, body };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        16
+      ],
+      "id": "89e83d99-3dd1-4e5f-9ce6-2a913368cc75",
+      "name": "Validate Input"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Source of truth: prompts/classify_and_enrich.md\n// When that file changes, re-paste the PROMPT_TEMPLATE below from it.\n\nconst PROMPT_TEMPLATE = `You are the intake triage classifier for ArcVault, a B2B SaaS product. Each input is a single unstructured inbound customer request — sent via email, web form, or support portal. Your job is to classify it and extract structured fields so that a downstream router can send it to the correct team queue.\n\nReturn JSON ONLY. No prose, no markdown, no preamble. The response MUST match the schema at the bottom of this prompt exactly.\n\n# Categories — choose exactly one\n\n| Category            | When to use |\n|---------------------|-------------|\n| Bug Report          | Something is broken for the sender (or a small known set of users). Includes error codes, malfunctioning features, unexpected behavior. **Default for single-user \"X stopped working for me\" reports**, even if the message blames a recent deploy. |\n| Incident/Outage     | The product is broken at scale: the message explicitly indicates impact beyond a single user — phrases like \"all users\", \"multiple users\", \"everyone\", \"entire team\", \"company-wide\", or unambiguous downtime language like \"service is down\". **Do NOT classify single-user errors here, even severe ones.** |\n| Feature Request     | Asking for functionality that doesn't exist today. Usually phrased \"we'd love...\", \"can you add...\", \"it would be great if...\". |\n| Billing Issue       | Anything about invoices, charges, contract rates, refunds, payment failures, or pricing disputes. |\n| Technical Question  | The customer wants information or guidance, not a fix. Examples: \"does X support Y?\", \"how do I configure Z?\", \"are you compatible with our auth provider?\". A how-to or feasibility question, not a broken thing. |\n\n# Priority — choose exactly one\n\n- \\`High\\`: customer is blocked, product is impaired for multiple users, money is at stake, or the message uses urgency language (\"urgent\", \"ASAP\", \"EOD\", \"blocked\").\n- \\`Medium\\`: meaningfully impacts work but has a workaround, or affects a non-critical area.\n- \\`Low\\`: informational, suggestion, no immediate work impact.\n\n# Confidence\n\nA number between 0.0 and 1.0 reflecting certainty about the **category** (not the priority). If the message could plausibly fit two categories, the score should reflect that uncertainty (typically 0.50–0.70). Reserve 0.90+ for cases where the category is unambiguous. A confidence below 0.70 will route the request to human review, so do not inflate.\n\n# Enrichment fields\n\n- \\`core_issue\\`: a single neutral sentence summarizing what the customer is asking or reporting. Strip pleasantries, apologies, and questions to the support team. Aim for under 25 words.\n- \\`identifiers\\`: an array of structured entities mentioned in the body. Each entry is \\`{ \"type\": <string>, \"value\": <string> }\\`. Use these types where they fit: \\`account\\`, \\`invoice\\`, \\`error_code\\`, \\`amount\\`, \\`url\\`, \\`product_name\\`, \\`timestamp\\`, \\`integration\\`. Return \\`[]\\` if none are present.\n- \\`urgency_signal\\`: a short string (under 15 words) describing what in the message indicates urgency, or \\`null\\` if no urgency markers are present. Look for: explicit downtime, \"multiple users affected\", explicit dollar amounts, sequencing tied to a recent deploy, or deadline language.\n\n# Examples\n\nInput:\n{\"source\": \"Email\", \"body\": \"I keep getting a 500 error when uploading files larger than 10MB. Started yesterday.\"}\nOutput:\n{\"category\": \"Bug Report\", \"priority\": \"Medium\", \"confidence\": 0.95, \"core_issue\": \"File uploads over 10MB fail with a 500 error starting yesterday.\", \"identifiers\": [{\"type\": \"error_code\", \"value\": \"500\"}, {\"type\": \"amount\", \"value\": \"10MB\"}], \"urgency_signal\": null}\n\nInput:\n{\"source\": \"Web Form\", \"body\": \"The whole platform is unreachable for our entire team since the last deploy.\"}\nOutput:\n{\"category\": \"Incident/Outage\", \"priority\": \"High\", \"confidence\": 0.98, \"core_issue\": \"Platform is unreachable for the customer's entire team following the latest deploy.\", \"identifiers\": [], \"urgency_signal\": \"entire team affected; tied to recent deploy\"}\n\nInput:\n{\"source\": \"Email\", \"body\": \"Just wondering — does your platform support SAML 2.0?\"}\nOutput:\n{\"category\": \"Technical Question\", \"priority\": \"Low\", \"confidence\": 0.92, \"core_issue\": \"Customer is asking whether the platform supports SAML 2.0.\", \"identifiers\": [{\"type\": \"integration\", \"value\": \"SAML 2.0\"}], \"urgency_signal\": null}\n\n# Output schema (return EXACTLY this shape)\n\n{\n  \"category\": \"Bug Report\" | \"Feature Request\" | \"Billing Issue\" | \"Technical Question\" | \"Incident/Outage\",\n  \"priority\": \"Low\" | \"Medium\" | \"High\",\n  \"confidence\": <number between 0.0 and 1.0>,\n  \"core_issue\": \"<single sentence>\",\n  \"identifiers\": [{\"type\": \"<string>\", \"value\": \"<string>\"}],\n  \"urgency_signal\": \"<short string>\" | null\n}\n\n# Now classify the following request\n\n{\"source\": \"<<SOURCE>>\", \"body\": \"<<BODY>>\"}`;\n\n// Escape the body so it is safe to embed inside the JSON object at the end of the prompt.\nconst escapedBody = $json.body\n  .replace(/\\\\/g, '\\\\\\\\')\n  .replace(/\"/g, '\\\\\"')\n  .replace(/\\n/g, '\\\\n')\n  .replace(/\\r/g, '\\\\r');\n\nconst classify_prompt = PROMPT_TEMPLATE\n  .replace('<<SOURCE>>', $json.source)\n  .replace('<<BODY>>', escapedBody);\n\nreturn { ...$json, classify_prompt };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        16
+      ],
+      "id": "9c945a2c-0c77-4c0b-9ac6-5c5a8503927d",
+      "name": "Build Classify Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.classify_prompt) }}\n    }\n  ],\n  \"response_format\": {\"type\": \"json_object\"},\n  \"temperature\": 0\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        784,
+        16
+      ],
+      "id": "7dc78356-becb-483e-844b-a25f4adee74f",
+      "name": "Groq Classify",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "NhvZDnl0I1A3hfVU",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Recover the original validated input from two nodes upstream.\nconst original = $('Build Classify Prompt').item.json;\n\n// Groq's structured response sits under choices[0].message.content as a JSON string.\nconst raw = $json.choices?.[0]?.message?.content;\nif (!raw) {\n  throw new Error(`Groq response missing content: ${JSON.stringify($json)}`);\n}\n\nlet classification;\ntry {\n  classification = JSON.parse(raw);\n} catch (e) {\n  throw new Error(`Groq returned non-JSON content: ${raw}`);\n}\n\n// --- Routing table (see plan §4 and docs/architecture.md) ---\nfunction decideRoute(category, body) {\n  if (category === 'Bug Report')         return 'Engineering';\n  if (category === 'Incident/Outage')    return 'Engineering';\n  if (category === 'Feature Request')    return 'Product';\n  if (category === 'Billing Issue')      return 'Billing';\n  if (category === 'Technical Question') {\n    return /\\b(sso|saml|okta|auth(entication)?|idp|oidc)\\b/i.test(body)\n      ? 'IT/Security'\n      : 'Product';\n  }\n  return 'Triage';\n}\n\n// --- Escalation triggers (any one fires it) ---\nfunction decideEscalation(c, body) {\n  const reasons = [];\n\n  if (typeof c.confidence === 'number' && c.confidence < 0.70) {\n    reasons.push(`classifier confidence ${c.confidence} below 0.70 threshold`);\n  }\n  if (c.category === 'Incident/Outage') {\n    reasons.push('category Incident/Outage always escalates');\n  }\n  const lower = body.toLowerCase();\n  if (lower.includes('outage'))                  reasons.push(\"body contains 'outage'\");\n  if (lower.includes('down for all users'))      reasons.push(\"body contains 'down for all users'\");\n  if (lower.includes('multiple users affected')) reasons.push(\"body contains 'multiple users affected'\");\n\n  // Billing dispute amount > $500.\n  // PDF says \"billing error > $500\" — the disputed amount, not any dollar in the body.\n  // Heuristic:\n  //   • 2+ amounts mentioned → dispute = max - min (e.g. \"charge $1,240 but contract $980\" → $260)\n  //   • 1 amount mentioned   → treat it as the disputed amount\n  //   • 0 amounts            → no amount-based escalation\n  if (c.category === 'Billing Issue') {\n    const amounts = (body.match(/\\$\\s*([\\d,]+(?:\\.\\d{1,2})?)/g) || [])\n      .map(a => parseFloat(a.replace(/[\\$,\\s]/g, '')))\n      .filter(n => !isNaN(n));\n\n    let disputed;\n    if (amounts.length >= 2) {\n      disputed = Math.max(...amounts) - Math.min(...amounts);\n    } else if (amounts.length === 1) {\n      disputed = amounts[0];\n    }\n\n    if (disputed !== undefined && disputed > 500) {\n      reasons.push(`billing dispute amount $${disputed} exceeds $500 threshold`);\n    }\n  }\n\n  return { flag: reasons.length > 0, reasons };\n}\n\nconst category_destination = decideRoute(classification.category, original.body);\nconst escalation           = decideEscalation(classification, original.body);\nconst final_destination    = escalation.flag ? 'Escalation' : category_destination;\n\nreturn {\n  input: {\n    id: original.id,\n    source: original.source,\n    body: original.body,\n  },\n  classification,\n  routing: {\n    category_destination,\n    final_destination,\n  },\n  escalation,\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1024,
+        16
+      ],
+      "id": "7535ecaa-1ed0-4be7-9260-d139a2421a60",
+      "name": "Parse Classify + Route"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Source of truth: prompts/summarize.md\n// Re-paste this PROMPT_TEMPLATE from that file whenever it changes.\n\nconst PROMPT_TEMPLATE = `You are writing a short brief for an ArcVault support team queue. A triage classifier has already categorized this customer request — your job is to produce a 2–3 sentence summary that the receiving team can read in under 10 seconds and act on.\n\nContext:\n- Category: <<CATEGORY>>\n- Priority: <<PRIORITY>>\n- Core issue (machine summary): <<CORE_ISSUE>>\n- Original customer message: <<BODY>>\n\nWrite a summary that:\n\n1. Opens with what happened or what is being asked, in plain language. Lead with the most important fact.\n2. Includes the most relevant identifier or constraint mentioned in the message (error code, invoice number, affected scope, integration name, dollar amount, etc.) when one exists.\n3. Ends with the implied next step for the receiving team — what they should look at or decide. Keep this concrete.\n\nStyle rules:\n- 2–3 sentences total. No bullet points, no headers.\n- Neutral and direct. No apologies, no marketing tone, no \"the customer is experiencing\".\n- Do not repeat the category or priority — those are stored separately.\n- Do not invent details. If the original message is vague, the summary should be vague too.\n\nReturn only the summary text. No quotes around it, no preamble, no trailing notes.`;\n\nconst c = $json.classification;\nconst body = $json.input.body;\n\nconst summary_prompt = PROMPT_TEMPLATE\n  .replace('<<CATEGORY>>', c.category)\n  .replace('<<PRIORITY>>', c.priority)\n  .replace('<<CORE_ISSUE>>', c.core_issue)\n  .replace('<<BODY>>', body);\n\nreturn { ...$json, summary_prompt };\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        96,
+        256
+      ],
+      "id": "c79fa501-f066-470c-ad61-fc95da1b6293",
+      "name": "Build Summary Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.summary_prompt) }}\n    }\n  ],\n  \"temperature\": 0.2\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        336,
+        256
+      ],
+      "id": "b98a5a12-a00f-40a2-8c81-16a12e73da6f",
+      "name": "Groq Summarize",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "NhvZDnl0I1A3hfVU",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Pull the full upstream state from the routing node (3 nodes back).\nconst upstream = $('Parse Classify + Route').item.json;\n\n// Groq's summary lives in choices[0].message.content as plain text.\nconst summary = $json.choices?.[0]?.message?.content?.trim();\nif (!summary) {\n  throw new Error(`Groq summarize response missing content: ${JSON.stringify($json)}`);\n}\n\n// Canonical output record — this shape is what we'll commit to data/outputs/results.json\n// and what we ship to whichever queue the routing chose.\nconst record = {\n  id: upstream.input.id,\n  source: upstream.input.source,\n  body: upstream.input.body,\n\n  category: upstream.classification.category,\n  priority: upstream.classification.priority,\n  confidence: upstream.classification.confidence,\n\n  core_issue: upstream.classification.core_issue,\n  identifiers: upstream.classification.identifiers,\n  urgency_signal: upstream.classification.urgency_signal,\n\n  routing: {\n    category_destination: upstream.routing.category_destination,\n    final_destination:    upstream.routing.final_destination,\n  },\n  escalation: upstream.escalation,\n\n  summary,\n  processed_at: new Date().toISOString(),\n};\n\nreturn record;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        448
+      ],
+      "id": "ec144f7e-abd4-43eb-aa0c-33fe7805c550",
+      "name": "Assemble Final Record"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        816,
+        288
+      ],
+      "id": "dfec888a-4a66-40d4-a20a-6238b94e9d2c",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.escalation.flag }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    },
+                    "id": "8e7ebaae-9f83-4de1-836a-4b5e1e5cfcf9"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Escalation"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Normal"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        816,
+        528
+      ],
+      "id": "245af952-5fda-47e9-b863-f73fa1cfda2b",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://webhook.site/addc3b02-5925-44b7-984e-a2295dd57e06/escalation",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1072,
+        464
+      ],
+      "id": "8bfbbc3a-e871-4b52-934e-659005f32aed",
+      "name": "Send to Escalation Queue"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://webhook.site/addc3b02-5925-44b7-984e-a2295dd57e06/normal",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1072,
+        704
+      ],
+      "id": "3c24acc9-798b-463f-974d-bc83b7ab5d58",
+      "name": "Send to Normal Queue"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Build Classify Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Classify Prompt": {
+      "main": [
+        [
+          {
+            "node": "Groq Classify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Classify": {
+      "main": [
+        [
+          {
+            "node": "Parse Classify + Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Classify + Route": {
+      "main": [
+        [
+          {
+            "node": "Build Summary Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Summary Prompt": {
+      "main": [
+        [
+          {
+            "node": "Groq Summarize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Summarize": {
+      "main": [
+        [
+          {
+            "node": "Assemble Final Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble Final Record": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Send to Escalation Queue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send to Normal Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "4a3ea7d0-d718-45d8-89a6-cd2acf83628d",
+  "meta": {
+    "instanceId": "cc420042e082f942d4ef20d60e026146c05a227a907ae285828678d9c72e26e8"
+  },
+  "id": "GplDAPvq9MQdX1xM",
+  "tags": []
+}
